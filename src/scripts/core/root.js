@@ -1,8 +1,12 @@
 (function () {
     'use strict';
 
-    angular.module('ariaNg').run(['$window', '$rootScope', '$location', '$document', '$timeout', 'ariaNgCommonService', 'ariaNgLocalizationService', 'ariaNgLogService', 'ariaNgSettingService', 'aria2TaskService', function ($window, $rootScope, $location, $document, $timeout, ariaNgCommonService, ariaNgLocalizationService, ariaNgLogService, ariaNgSettingService, aria2TaskService) {
+    angular.module('ariaNg').run(['$window', '$rootScope', '$location', '$document', '$timeout', 'ariaNgCommonService', 'ariaNgKeyboardService', 'ariaNgNotificationService', 'ariaNgLogService', 'ariaNgSettingService', 'aria2TaskService', function ($window, $rootScope, $location, $document, $timeout, ariaNgCommonService, ariaNgKeyboardService, ariaNgNotificationService, ariaNgLogService, ariaNgSettingService, aria2TaskService) {
         var autoRefreshAfterPageLoad = false;
+
+        var isAnyTextboxOrTextareaFocus = function () {
+            return angular.element('input[type="text"],textarea').is(':focus');
+        };
 
         var isUrlMatchUrl2 = function (url, url2) {
             if (url === url2) {
@@ -77,7 +81,7 @@
                 angular.element('.main-sidebar').addClass('blur');
                 angular.element('.navbar').addClass('blur');
                 angular.element('.content-body').addClass('blur');
-                ariaNgLocalizationService.notifyInPage('', 'You cannot use AriaNg because this browser does not meet the minimum requirements for data storage.', {
+                ariaNgNotificationService.notifyInPage('', 'You cannot use AriaNg because this browser does not meet the minimum requirements for data storage.', {
                     type: 'error',
                     delay: false
                 });
@@ -132,7 +136,10 @@
         $rootScope.currentTheme = 'light';
 
         $rootScope.searchContext = {
-            text: ''
+            text: '',
+            setSearchBoxFocused: function () {
+                angular.element('#search-box').focus();
+            }
         };
 
         $rootScope.taskContext = {
@@ -345,7 +352,17 @@
             return task && task.status === 'error' && task.errorDescription && !task.bittorrent;
         };
 
-        $rootScope.keydownActions = {};
+        $rootScope.keydownActions = {
+            find: function (event) {
+                if (event.preventDefault) {
+                    event.preventDefault();
+                }
+
+                $rootScope.searchContext.setSearchBoxFocused();
+
+                return false;
+            }
+        };
 
         $rootScope.swipeActions = {
             leftSwipe: function () {
@@ -398,29 +415,25 @@
                 return;
             }
 
-            var keyCode = event.keyCode || event.which || event.charCode;
+            var isTextboxOrTextareaFocus = isAnyTextboxOrTextareaFocus();
 
-            if ((event.code === 'KeyA' || keyCode === 65) && (event.ctrlKey || event.metaKey)) { // Ctrl+A / Command+A
+            if (ariaNgKeyboardService.isCtrlAPressed(event) && !isTextboxOrTextareaFocus) {
                 if (angular.isFunction($rootScope.keydownActions.selectAll)) {
-                    $rootScope.keydownActions.selectAll();
+                    return $rootScope.keydownActions.selectAll(event);
                 }
-            } else if (event.code === 'Delete' || keyCode === 46) { // Delete
+            } else if (ariaNgKeyboardService.isCtrlFPressed(event)) {
+                if (angular.isFunction($rootScope.keydownActions.find)) {
+                    return $rootScope.keydownActions.find(event);
+                }
+            } else if (ariaNgKeyboardService.isDeletePressed(event) && !isTextboxOrTextareaFocus) {
                 if (angular.isFunction($rootScope.keydownActions.delete)) {
-                    $rootScope.keydownActions.delete();
+                    return $rootScope.keydownActions.delete(event);
                 }
             }
         }, true);
 
-        ariaNgSettingService.onApplicationCacheUpdated(function () {
-            ariaNgLocalizationService.notifyInPage('', 'Application cache has been updated, please reload the page for the changes to take effect.', {
-                delay: false,
-                type: 'info',
-                templateUrl: 'views/notification-reloadable.html'
-            });
-        });
-
         ariaNgSettingService.onFirstAccess(function () {
-            ariaNgLocalizationService.notifyInPage('', 'Tap to configure and get started with AriaNg.', {
+            ariaNgNotificationService.notifyInPage('', 'Tap to configure and get started with AriaNg.', {
                 delay: false,
                 onClose: function () {
                     $location.path('/settings/ariang');
@@ -429,7 +442,7 @@
         });
 
         aria2TaskService.onFirstSuccess(function (event) {
-            ariaNgLocalizationService.notifyInPage('', 'is connected', {
+            ariaNgNotificationService.notifyInPage('', 'is connected', {
                 type: 'success',
                 contentPrefix: event.rpcName + ' '
             });
@@ -468,15 +481,15 @@
         });
 
         aria2TaskService.onTaskCompleted(function (event) {
-            ariaNgLocalizationService.notifyTaskComplete(event.task);
+            ariaNgNotificationService.notifyTaskComplete(event.task);
         });
 
         aria2TaskService.onBtTaskCompleted(function (event) {
-            ariaNgLocalizationService.notifyBtTaskComplete(event.task);
+            ariaNgNotificationService.notifyBtTaskComplete(event.task);
         });
 
         aria2TaskService.onTaskErrorOccur(function (event) {
-            ariaNgLocalizationService.notifyTaskError(event.task);
+            ariaNgNotificationService.notifyTaskError(event.task);
         });
 
         $rootScope.$on('$locationChangeStart', function (event) {
